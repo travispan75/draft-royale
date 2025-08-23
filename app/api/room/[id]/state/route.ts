@@ -3,10 +3,10 @@ import { roomStore } from "@/app/server/roomStore";
 
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { id: string } }
+  ctx: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const { id } = await ctx.params;
     const room = roomStore.ensureRoom(id);
 
     return NextResponse.json(

@@ -1,4 +1,3 @@
-// data/cards.ts
 export const CARDS = [
   { name: "archer-queen", image: "/cards/Archer Queen.png" },
   { name: "archers", image: "/cards/Archer_card_frame_alpha.png" },
@@ -99,7 +98,7 @@ export const CARDS = [
   { name: "snowball", image: "/cards/Card_Snowball.png" },
   { name: "sparky", image: "/cards/Card_Sparky.png" },
   { name: "spear-goblins", image: "/cards/Card_Spear Goblins.png" },
-  { name: "suspicious-bush", image: "/cards/Card_Suspicious_Bush.png" },
+  { name: "suspicious-bush", image: "/cards/SuspiciousBushCard.webp" },
   { name: "tesla", image: "/cards/Card_Tesla.png" },
   { name: "the-log", image: "/cards/Card_The Log.png" },
   { name: "three-musketeers", image: "/cards/Card_Three Musketeers.png" },
@@ -115,3 +114,12 @@ export const CARDS = [
   { name: "zappies", image: "/cards/Card_Zappies.png" },
   { name: "little-prince", image: "/cards/Little_Prince_card.png" },
 ];
+
+export const NO_PADDING_CARDS = new Set<string>([
+  "void",
+  "berserker",
+  "archers",
+  "firecracker",
+  "knight",
+  "suspicious-bush"
+]);
