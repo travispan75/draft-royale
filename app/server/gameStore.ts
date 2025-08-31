@@ -12,6 +12,8 @@ export type GameState = {
     turnIndex: number;
     pickIndex: number;
     roleByPlayerId: Record<string, "p1" | "p2">;
+    timer: number;
+    timeout?: NodeJS.Timeout;
 };
 
 const games = new Map<string, GameState>();
@@ -48,6 +50,7 @@ export function initGame(id: string, room: { players: string[] }): GameState {
             [room.players[0]]: "p1",
             [room.players[1]]: "p2",
         },
+        timer: 15
     };
     games.set(id, g);
     return g;

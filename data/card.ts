@@ -121,5 +121,9 @@ export const NO_PADDING_CARDS = new Set<string>([
   "archers",
   "firecracker",
   "knight",
-  "suspicious-bush"
+  "suspicious-bush",
+  "rune-giant",
+  "skeletons",
+  "furnace",
+  "phoenix"
 ]);
