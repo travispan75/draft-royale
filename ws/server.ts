@@ -1,3 +1,5 @@
+import * as dotenv from "dotenv";
+dotenv.config({ path: ".env.local" });
 import { createServer } from "http";
 import next from "next";
 import { Server } from "socket.io";
@@ -8,6 +10,7 @@ import {
     handleDraftRequestState,
     handleDraftPick,
 } from "./handlers";
+console.log("REDIS_URL:", process.env.UPSTASH_REDIS_REST_URL);
 
 const dev = process.env.NODE_ENV !== "production";
 const app = next({ dev });

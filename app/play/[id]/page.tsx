@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState, useRef } from 'react'
-import { redirect, useParams, useRouter } from 'next/navigation'
+import { useParams } from 'next/navigation'
 import { v4 as uuidv4 } from 'uuid'
 import CardGrid from './_components/CardGrid'
 import { io, Socket } from 'socket.io-client'
@@ -21,28 +21,31 @@ function getOrCreatePlayerId() {
 
 export default function Home() {
   const params = useParams()
-  const router = useRouter()
   const id = useMemo(() => {
     const raw = params?.id
     return Array.isArray(raw) ? raw[0] : (raw as string | undefined)
   }, [params])
 
-  const [joined, setJoined] = useState(false)
   const [snap, setSnap] = useState<DraftSnapshot | null>(null)
-  const socketRef = useRef<Socket<ServerToClient, ClientToServer> | null>(null)
-  const playerIdRef = useRef<string>('')
   const [now, setNow] = useState(Date.now())
   const [offset, setOffset] = useState(0)
+  const [ready, setReady] = useState(false)
+
+  const socketRef = useRef<Socket<ServerToClient, ClientToServer> | null>(null)
+  const playerIdRef = useRef<string>('')
 
   useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000)
-    return () => clearInterval(id)
+    playerIdRef.current = getOrCreatePlayerId()
+    setReady(true)
   }, [])
 
   useEffect(() => {
-    if (snap) {
-      setOffset(snap.serverNow - Date.now())
-    }
+    const h = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(h)
+  }, [])
+
+  useEffect(() => {
+    if (snap) setOffset(snap.serverNow - Date.now())
   }, [snap])
 
   const remaining = useMemo(() => {
@@ -51,52 +54,39 @@ export default function Home() {
   }, [snap?.turnDeadline, now, offset])
 
   useEffect(() => {
-    if (!id) return
-      ; (async () => {
-        try {
-          const playerId = getOrCreatePlayerId()
-          playerIdRef.current = playerId
-          const res = await fetch(`/api/room/${id}/join`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ playerId }),
-          })
-          const data = await res.json()
-          if (res.ok && data.ok) {
-            setJoined(true)
-          } else {
-            router.replace(`/waiting/${id}`)
-          }
-        } catch {
-          router.replace(`/waiting/${id}`)
-        }
-      })()
-  }, [id, router])
+    if (!id || !ready) return
+    if (socketRef.current) return
 
-  useEffect(() => {
-    if (!joined || !id) return
-    const socket = io('/', { path: '/socket' })
+    const socket = io('/', {
+      path: '/socket',
+      transports: ['websocket'],
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 500,
+    })
     socketRef.current = socket
 
     socket.on('connect', () => {
-      socket.emit('join_room', { roomId: id, playerId: playerIdRef.current })
-      socket.emit('game_ensure', { roomId: id })
-      socket.emit('draft_request_state', { roomId: id })
+      const roomId = id as string
+      const playerId = playerIdRef.current
+      socket.emit('join_room', { roomId, playerId })
+      socket.emit('game_ensure', { roomId })
+      socket.emit('draft_request_state', { roomId })
     })
 
-    socket.on('draft_state', s => {
-      console.log("draft_state update:", s.status, "turnIndex=", s.pickIndex)
+    socket.on('draft_state', (s) => {
       setSnap(s)
     })
-    socket.on('ws_error', e => console.warn('ws_error', e))
+
+    socket.on('ws_error', () => { })
+    socket.on('disconnect', () => { })
+    socket.on('connect_error', () => { })
 
     return () => {
       socket.disconnect()
       socketRef.current = null
     }
-  }, [joined, id])
-
-  if (!joined) return null
+  }, [id, ready])
 
   const myRole =
     snap &&

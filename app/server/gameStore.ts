@@ -1,4 +1,6 @@
 import { CARDS } from "@/data/card";
+import * as dotenv from "dotenv";
+dotenv.config({ path: ".env.local" });
 import { Redis } from "@upstash/redis";
 
 export type GameState = {
@@ -14,8 +16,7 @@ export type GameState = {
     pickIndex: number;
     roleByPlayerId: Record<string, "p1" | "p2">;
     timer: number;
-    timeout?: NodeJS.Timeout;
-    turnDeadline?: number;
+    turnDeadline: number | null;
 };
 
 const redis = new Redis({
@@ -23,27 +24,43 @@ const redis = new Redis({
     token: process.env.UPSTASH_REDIS_REST_TOKEN!,
 });
 
+const GAME_KEY = (id: string) => `game:${id}`;
+
 async function saveGame(game: GameState) {
-    await redis.set(game.id, {
+    await redis.set(GAME_KEY(game.id), {
         ...game,
         used: Array.from(game.used),
     });
 }
 
 async function loadGame(id: string): Promise<GameState | null> {
-    const raw = await redis.get<any>(id);
+    const raw = await redis.get<any>(GAME_KEY(id));
     if (!raw) return null;
     return {
         ...raw,
-        used: new Set(raw.used),
+        used: new Set(raw.used ?? []),
+        decks: raw.decks ?? { p1: [], p2: [] },
+        roleByPlayerId: raw.roleByPlayerId ?? {},
+        pool: raw.pool ?? [],
+        schedule: raw.schedule ?? [],
+        phase: raw.phase ?? "draft",
+        turnIndex: raw.turnIndex ?? 0,
+        pickIndex: raw.pickIndex ?? 0,
+        current: raw.current ?? "p1",
+        timer: raw.timer ?? 15,
+        turnDeadline: raw.turnDeadline ?? null,
     } as GameState;
 }
 
 export async function initGame(id: string, room: { players: string[] }): Promise<GameState> {
+    if (room.players.length < 2) throw new Error("cannot_init_game_with_less_than_two_players");
+
     const allNames = CARDS.map(c => c.name);
     const pool = allNames.sort(() => Math.random() - 0.5).slice(0, 36);
+
     const firstPick = Math.random() < 0.5 ? "p1" : "p2";
     const other: "p1" | "p2" = firstPick === "p1" ? "p2" : "p1";
+
     const schedule: Array<{ who: "p1" | "p2"; count: 1 | 2 }> = [
         { who: firstPick, count: 1 },
         { who: other, count: 2 },
@@ -56,6 +73,7 @@ export async function initGame(id: string, room: { players: string[] }): Promise
         { who: firstPick, count: 1 },
         { who: other, count: 1 },
     ];
+
     const g: GameState = {
         id,
         phase: "draft",
@@ -72,7 +90,9 @@ export async function initGame(id: string, room: { players: string[] }): Promise
             [room.players[1]]: "p2",
         },
         timer: 15,
+        turnDeadline: null,
     };
+
     await saveGame(g);
     return g;
 }
@@ -102,7 +122,7 @@ export async function applyPick(id: string, playerId: string, card: string) {
     g.used.add(card);
 
     g.pickIndex++;
-    const { who, count } = g.schedule[g.turnIndex];
+    const { count } = g.schedule[g.turnIndex];
 
     if (g.pickIndex >= count) {
         g.turnIndex++;
@@ -114,6 +134,14 @@ export async function applyPick(id: string, playerId: string, card: string) {
         }
     }
 
+    await saveGame(g);
+    return g;
+}
+
+export async function setTurnDeadline(id: string, deadline: number | null) {
+    const g = await loadGame(id);
+    if (!g) throw new Error("game_not_found");
+    g.turnDeadline = deadline ?? null;
     await saveGame(g);
     return g;
 }

@@ -1,10 +1,12 @@
 import type { Server, Socket } from "socket.io";
 import type { ClientToServer, ServerToClient, JoinRoom, DraftSnapshot } from "./events";
 import { roomStore } from "@/app/server/roomStore";
-import { getGame, ensureGame, applyPick } from "@/app/server/gameStore";
+import { getGame, ensureGame, applyPick, setTurnDeadline } from "@/app/server/gameStore";
 
 type Io = Server<ClientToServer, ServerToClient>;
 type S = Socket<ClientToServer, ServerToClient>;
+
+const draftTimers = new Map<string, NodeJS.Timeout>();
 
 export async function handleJoinRoom(io: Io, socket: S, { roomId, playerId }: JoinRoom) {
     if (!roomId || !playerId) {
@@ -60,7 +62,9 @@ export async function handleGameEnsure(io: Io, socket: S, { roomId }: { roomId: 
     let g = await getGame(roomId);
     if (!g) {
         g = await ensureGame(roomId, { players: room.players });
-        startTimer(io, roomId);
+        await startTimer(io, roomId);
+    } else {
+        await resumeTimer(io, roomId);
     }
 
     socket.emit("draft_state", await toDraftSnapshot(roomId));
@@ -87,7 +91,7 @@ export async function handleDraftPick(
 
     try {
         await applyPick(roomId, playerId, card);
-        startTimer(io, roomId);
+        await startTimer(io, roomId);
         io.to(roomId).emit("draft_state", await toDraftSnapshot(roomId));
     } catch (e: any) {
         const msg = String(e?.message || e);
@@ -97,31 +101,68 @@ export async function handleDraftPick(
 
 async function startTimer(io: Io, roomId: string) {
     const g = await getGame(roomId);
-    if (!g || g.phase !== "draft") return;
+    if (!g || g.phase !== "draft") {
+        clearRoomTimer(roomId);
+        return;
+    }
 
-    if (g.timeout) clearTimeout(g.timeout);
+    clearRoomTimer(roomId);
 
     const durationMs = (g.timer ?? 15) * 1000;
-    g.turnDeadline = Date.now() + durationMs;
+    const deadline = Date.now() + durationMs;
 
-    g.timeout = setTimeout(async () => {
-        const g2 = await getGame(roomId);
-        if (!g2 || g2.phase !== "draft") return;
+    console.log("SERVER TIME:", Date.now(), "deadline:", deadline);
 
-        const { who } = g2.schedule[g2.turnIndex];
-        const available = g2.pool.filter(c => !g2.used.has(c));
-        if (available.length === 0) return;
+    await setTurnDeadline(roomId, deadline);
 
-        const randomCard = available[Math.floor(Math.random() * available.length)];
-        const playerId = Object.entries(g2.roleByPlayerId).find(([_, r]) => r === who)?.[0];
-        if (!playerId) return;
+    const handle = setTimeout(() => onTimerFire(io, roomId).catch(console.error), durationMs);
+    draftTimers.set(roomId, handle);
+}
 
-        try {
-            await applyPick(roomId, playerId, randomCard);
-            startTimer(io, roomId);
-            io.to(roomId).emit("draft_state", await toDraftSnapshot(roomId));
-        } catch (e) {
-            console.error("auto-pick failed", e);
-        }
-    }, durationMs);
+async function resumeTimer(io: Io, roomId: string) {
+    const g = await getGame(roomId);
+    if (!g || g.phase !== "draft" || !g.turnDeadline) {
+        clearRoomTimer(roomId);
+        return;
+    }
+
+    clearRoomTimer(roomId);
+
+    const remaining = Math.max(0, g.turnDeadline - Date.now());
+    const handle = setTimeout(() => onTimerFire(io, roomId).catch(console.error), remaining);
+    draftTimers.set(roomId, handle);
+}
+
+async function onTimerFire(io: Io, roomId: string) {
+    clearRoomTimer(roomId);
+
+    const g = await getGame(roomId);
+    if (!g || g.phase !== "draft") return;
+
+    if (g.turnDeadline && Date.now() < g.turnDeadline) {
+        await resumeTimer(io, roomId);
+        return;
+    }
+
+    const { who } = g.schedule[g.turnIndex];
+    const available = g.pool.filter(c => !g.used.has(c));
+    if (available.length === 0) return;
+
+    const randomCard = available[Math.floor(Math.random() * available.length)];
+    const playerId = Object.entries(g.roleByPlayerId).find(([_, r]) => r === who)?.[0];
+    if (!playerId) return;
+
+    try {
+        await applyPick(roomId, playerId, randomCard);
+        await startTimer(io, roomId);
+        io.to(roomId).emit("draft_state", await toDraftSnapshot(roomId));
+    } catch (e) {
+        console.error("auto-pick failed", e);
+    }
+}
+
+function clearRoomTimer(roomId: string) {
+    const t = draftTimers.get(roomId);
+    if (t) clearTimeout(t);
+    draftTimers.delete(roomId);
 }

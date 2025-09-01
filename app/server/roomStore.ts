@@ -1,3 +1,5 @@
+import * as dotenv from "dotenv";
+dotenv.config({ path: ".env.local" });
 import { Redis } from "@upstash/redis";
 
 export type RoomStatus = "waiting" | "ready";
@@ -18,12 +20,14 @@ const redis = new Redis({
     token: process.env.UPSTASH_REDIS_REST_TOKEN!,
 });
 
+const ROOM_KEY = (id: string) => `room:${id}`;
+
 async function saveRoom(room: Room) {
-    await redis.set(room.id, room);
+    await redis.set(ROOM_KEY(room.id), room);
 }
 
 async function loadRoom(id: string): Promise<Room | null> {
-    return await redis.get<Room>(id);
+    return await redis.get<Room>(ROOM_KEY(id));
 }
 
 class RoomStore {
