@@ -1,4 +1,5 @@
 import { CARDS } from "@/data/card";
+import { Redis } from "@upstash/redis";
 
 export type GameState = {
     id: string;
@@ -17,10 +18,28 @@ export type GameState = {
     turnDeadline?: number;
 };
 
+const redis = new Redis({
+    url: process.env.UPSTASH_REDIS_REST_URL!,
+    token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+});
 
-const games = new Map<string, GameState>();
+async function saveGame(game: GameState) {
+    await redis.set(game.id, {
+        ...game,
+        used: Array.from(game.used),
+    });
+}
 
-export function initGame(id: string, room: { players: string[] }): GameState {
+async function loadGame(id: string): Promise<GameState | null> {
+    const raw = await redis.get<any>(id);
+    if (!raw) return null;
+    return {
+        ...raw,
+        used: new Set(raw.used),
+    } as GameState;
+}
+
+export async function initGame(id: string, room: { players: string[] }): Promise<GameState> {
     const allNames = CARDS.map(c => c.name);
     const pool = allNames.sort(() => Math.random() - 0.5).slice(0, 36);
     const firstPick = Math.random() < 0.5 ? "p1" : "p2";
@@ -40,36 +59,36 @@ export function initGame(id: string, room: { players: string[] }): GameState {
     const g: GameState = {
         id,
         phase: "draft",
-        pool: pool,
+        pool,
         used: new Set(),
         decks: { p1: [], p2: [] },
         first: firstPick,
         current: firstPick,
-        schedule: schedule,
+        schedule,
         turnIndex: 0,
         pickIndex: 0,
         roleByPlayerId: {
             [room.players[0]]: "p1",
             [room.players[1]]: "p2",
         },
-        timer: 15
+        timer: 15,
     };
-    games.set(id, g);
+    await saveGame(g);
     return g;
 }
 
-export function ensureGame(id: string, room: { players: string[] }) {
-    let g = games.get(id);
-    if (!g) g = initGame(id, room);
+export async function ensureGame(id: string, room: { players: string[] }) {
+    let g = await loadGame(id);
+    if (!g) g = await initGame(id, room);
     return g;
 }
 
-export function getGame(id: string) {
-    return games.get(id);
+export async function getGame(id: string) {
+    return await loadGame(id);
 }
 
-export function applyPick(id: string, playerId: string, card: string) {
-    const g = games.get(id);
+export async function applyPick(id: string, playerId: string, card: string) {
+    const g = await loadGame(id);
     if (!g) throw new Error("game_not_found");
 
     const role = g.roleByPlayerId[playerId];
@@ -95,6 +114,6 @@ export function applyPick(id: string, playerId: string, card: string) {
         }
     }
 
+    await saveGame(g);
     return g;
 }
-

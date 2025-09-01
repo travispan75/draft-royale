@@ -6,13 +6,13 @@ import { getGame, ensureGame, applyPick } from "@/app/server/gameStore";
 type Io = Server<ClientToServer, ServerToClient>;
 type S = Socket<ClientToServer, ServerToClient>;
 
-export function handleJoinRoom(io: Io, socket: S, { roomId, playerId }: JoinRoom) {
+export async function handleJoinRoom(io: Io, socket: S, { roomId, playerId }: JoinRoom) {
     if (!roomId || !playerId) {
         socket.emit("ws_error", { code: "bad_payload", msg: "roomId and playerId required" });
         return;
     }
 
-    const result = roomStore.join(roomId, playerId);
+    const result = await roomStore.join(roomId, playerId);
     if (!result.ok) {
         socket.emit("ws_error", { code: result.error, msg: "cannot join room" });
         return;
@@ -22,19 +22,19 @@ export function handleJoinRoom(io: Io, socket: S, { roomId, playerId }: JoinRoom
     io.to(roomId).emit("room_state", result.room);
 }
 
-export function handleGetRoom(io: Io, socket: S, { roomId }: { roomId: string }) {
-    const room = roomStore.ensureRoom(roomId);
+export async function handleGetRoom(io: Io, socket: S, { roomId }: { roomId: string }) {
+    const room = await roomStore.ensureRoom(roomId);
     socket.emit("room_state", room);
 }
 
-export function toDraftSnapshot(roomId: string): DraftSnapshot {
-    const g = getGame(roomId)
-    if (!g) throw new Error("game_not_found")
+export async function toDraftSnapshot(roomId: string): Promise<DraftSnapshot> {
+    const g = await getGame(roomId);
+    if (!g) throw new Error("game_not_found");
 
     const players = {
         p1: Object.keys(g.roleByPlayerId).find(pid => g.roleByPlayerId[pid] === "p1")!,
         p2: Object.keys(g.roleByPlayerId).find(pid => g.roleByPlayerId[pid] === "p2")!,
-    }
+    };
 
     return {
         roomId: g.id,
@@ -46,37 +46,36 @@ export function toDraftSnapshot(roomId: string): DraftSnapshot {
         pickIndex: g.pickIndex,
         timer: g.timer ?? 15,
         turnDeadline: g.turnDeadline ?? null,
-        serverNow: Date.now()
-    }
+        serverNow: Date.now(),
+    };
 }
 
-export function handleGameEnsure(io: Io, socket: S, { roomId }: { roomId: string }) {
-    const room = roomStore.ensureRoom(roomId);
+export async function handleGameEnsure(io: Io, socket: S, { roomId }: { roomId: string }) {
+    const room = await roomStore.ensureRoom(roomId);
     if (room.players.length !== 2) {
         socket.emit("ws_error", { code: "bad_payload", msg: "room not ready" });
         return;
     }
 
-    let g = getGame(roomId);
+    let g = await getGame(roomId);
     if (!g) {
-        g = ensureGame(roomId, { players: room.players });
+        g = await ensureGame(roomId, { players: room.players });
         startTimer(io, roomId);
     }
 
-    socket.emit("draft_state", toDraftSnapshot(roomId));
+    socket.emit("draft_state", await toDraftSnapshot(roomId));
 }
 
-
-export function handleDraftRequestState(io: Io, socket: S, { roomId }: { roomId: string }) {
-    const g = getGame(roomId);
+export async function handleDraftRequestState(io: Io, socket: S, { roomId }: { roomId: string }) {
+    const g = await getGame(roomId);
     if (!g) {
         socket.emit("ws_error", { code: "game_not_found", msg: "no game for room" });
         return;
     }
-    socket.emit("draft_state", toDraftSnapshot(roomId));
+    socket.emit("draft_state", await toDraftSnapshot(roomId));
 }
 
-export function handleDraftPick(
+export async function handleDraftPick(
     io: Io,
     socket: S,
     { roomId, playerId, card }: { roomId: string; playerId: string; card: string }
@@ -87,42 +86,42 @@ export function handleDraftPick(
     }
 
     try {
-        applyPick(roomId, playerId, card);
+        await applyPick(roomId, playerId, card);
         startTimer(io, roomId);
-        io.to(roomId).emit("draft_state", toDraftSnapshot(roomId));
+        io.to(roomId).emit("draft_state", await toDraftSnapshot(roomId));
     } catch (e: any) {
         const msg = String(e?.message || e);
         socket.emit("ws_error", { code: "bad_payload", msg });
     }
 }
 
-function startTimer(io: Io, roomId: string) {
-    const g = getGame(roomId)
-    if (!g || g.phase !== "draft") return
+async function startTimer(io: Io, roomId: string) {
+    const g = await getGame(roomId);
+    if (!g || g.phase !== "draft") return;
 
-    if (g.timeout) clearTimeout(g.timeout)
+    if (g.timeout) clearTimeout(g.timeout);
 
-    const durationMs = (g.timer ?? 15) * 1000
+    const durationMs = (g.timer ?? 15) * 1000;
+    g.turnDeadline = Date.now() + durationMs;
 
-    g.turnDeadline = Date.now() + durationMs
+    g.timeout = setTimeout(async () => {
+        const g2 = await getGame(roomId);
+        if (!g2 || g2.phase !== "draft") return;
 
-    g.timeout = setTimeout(() => {
-        if (g.phase !== "draft") return
+        const { who } = g2.schedule[g2.turnIndex];
+        const available = g2.pool.filter(c => !g2.used.has(c));
+        if (available.length === 0) return;
 
-        const { who } = g.schedule[g.turnIndex]
-        const available = g.pool.filter(c => !g.used.has(c))
-        if (available.length === 0) return
-
-        const randomCard = available[Math.floor(Math.random() * available.length)]
-        const playerId = Object.entries(g.roleByPlayerId).find(([_, r]) => r === who)?.[0]
-        if (!playerId) return
+        const randomCard = available[Math.floor(Math.random() * available.length)];
+        const playerId = Object.entries(g2.roleByPlayerId).find(([_, r]) => r === who)?.[0];
+        if (!playerId) return;
 
         try {
-            applyPick(roomId, playerId, randomCard)
-            startTimer(io, roomId)
-            io.to(roomId).emit("draft_state", toDraftSnapshot(roomId))
+            await applyPick(roomId, playerId, randomCard);
+            startTimer(io, roomId);
+            io.to(roomId).emit("draft_state", await toDraftSnapshot(roomId));
         } catch (e) {
-            console.error("auto-pick failed", e)
+            console.error("auto-pick failed", e);
         }
-    }, durationMs)
+    }, durationMs);
 }
