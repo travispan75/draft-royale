@@ -41,7 +41,7 @@ class RoomStore {
     }
 
     async join(id: string, playerId: string): Promise<JoinResult> {
-        let room = await this.ensureRoom(id);
+        const room = await this.ensureRoom(id);
 
         const idx = room.players.indexOf(playerId);
         if (idx !== -1) {

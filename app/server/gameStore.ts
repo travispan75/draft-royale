@@ -34,28 +34,36 @@ async function saveGame(game: GameState) {
 }
 
 async function loadGame(id: string): Promise<GameState | null> {
-    const raw = await redis.get<any>(GAME_KEY(id));
+    const raw = await redis.get<Record<string, unknown>>(GAME_KEY(id));
     if (!raw) return null;
+
     return {
-        ...raw,
-        used: new Set(raw.used ?? []),
-        decks: raw.decks ?? { p1: [], p2: [] },
-        roleByPlayerId: raw.roleByPlayerId ?? {},
-        pool: raw.pool ?? [],
-        schedule: raw.schedule ?? [],
-        phase: raw.phase ?? "draft",
-        turnIndex: raw.turnIndex ?? 0,
-        pickIndex: raw.pickIndex ?? 0,
-        current: raw.current ?? "p1",
-        timer: raw.timer ?? 15,
-        turnDeadline: raw.turnDeadline ?? null,
-    } as GameState;
+        id: (raw.id as string) ?? id,
+        phase: (raw.phase as "draft" | "finished") ?? "draft",
+        pool: (raw.pool as string[]) ?? [],
+        used: new Set((raw.used as string[]) ?? []),
+        decks: (raw.decks as { p1: string[]; p2: string[] }) ?? { p1: [], p2: [] },
+        first: (raw.first as "p1" | "p2") ?? "p1",
+        current: (raw.current as "p1" | "p2") ?? "p1",
+        schedule:
+            (raw.schedule as Array<{ who: "p1" | "p2"; count: 1 | 2 }>) ?? [],
+        turnIndex: (raw.turnIndex as number) ?? 0,
+        pickIndex: (raw.pickIndex as number) ?? 0,
+        roleByPlayerId: (raw.roleByPlayerId as Record<string, "p1" | "p2">) ?? {},
+        timer: (raw.timer as number) ?? 15,
+        turnDeadline:
+            typeof raw.turnDeadline === "number" ? (raw.turnDeadline as number) : null,
+    };
 }
 
-export async function initGame(id: string, room: { players: string[] }): Promise<GameState> {
-    if (room.players.length < 2) throw new Error("cannot_init_game_with_less_than_two_players");
+export async function initGame(
+    id: string,
+    room: { players: string[] }
+): Promise<GameState> {
+    if (room.players.length < 2)
+        throw new Error("cannot_init_game_with_less_than_two_players");
 
-    const allNames = CARDS.map(c => c.name);
+    const allNames = CARDS.map((c) => c.name);
     const pool = allNames.sort(() => Math.random() - 0.5).slice(0, 36);
 
     const firstPick = Math.random() < 0.5 ? "p1" : "p2";
@@ -107,7 +115,11 @@ export async function getGame(id: string) {
     return await loadGame(id);
 }
 
-export async function applyPick(id: string, playerId: string, card: string) {
+export async function applyPick(
+    id: string,
+    playerId: string,
+    card: string
+): Promise<GameState> {
     const g = await loadGame(id);
     if (!g) throw new Error("game_not_found");
 
@@ -138,7 +150,10 @@ export async function applyPick(id: string, playerId: string, card: string) {
     return g;
 }
 
-export async function setTurnDeadline(id: string, deadline: number | null) {
+export async function setTurnDeadline(
+    id: string,
+    deadline: number | null
+): Promise<GameState> {
     const g = await loadGame(id);
     if (!g) throw new Error("game_not_found");
     g.turnDeadline = deadline ?? null;
