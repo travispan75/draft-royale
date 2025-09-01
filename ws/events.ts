@@ -21,6 +21,8 @@ export type DraftSnapshot = {
     turn: "p1" | "p2";
     pickIndex: number;
     timer: number;
+    turnDeadline: number | null;
+    serverNow: number;
 };
 
 export type ClientToServer = {

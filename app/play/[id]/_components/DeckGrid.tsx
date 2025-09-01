@@ -2,6 +2,8 @@
 
 import { CARDS, NO_PADDING_CARDS } from '@/data/card';
 import { FaPlus } from 'react-icons/fa';
+import { motion } from 'framer-motion';
+import { fadeUp } from '@/app/animations/fadeUp';
 
 type Props = { cards: string[] };
 
@@ -16,8 +18,8 @@ export default function DeckGrid({ cards }: Props) {
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(4, 120px)',
-        gridAutoRows: '120px',
+        gridTemplateColumns: 'repeat(4, 1fr)',
+        gridAutoRows: '1fr',
         gap: 12,
         justifyContent: 'center',
         alignContent: 'center',
@@ -57,21 +59,43 @@ export default function DeckGrid({ cards }: Props) {
           <div key={i} style={cellStyle}>
             {hasCard ? (
               isNoPad ? (
-                <img
+                <motion.img
                   src={src}
                   alt={name}
-                  style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
-                />
-              ) : (
-                <img
-                  src={src}
-                  alt={name}
+                  variants={fadeUp}
+                  initial="hidden"
+                  animate="visible"
                   style={{
                     maxWidth: '100%',
                     maxHeight: '100%',
-                    objectFit: 'cover',
-                    transform: 'scale(1.25) translateY(-15%)',
-                    transformOrigin: 'center top',
+                    objectFit: 'contain',
+                  }}
+                />
+              ) : (
+                <motion.img
+                  src={src}
+                  alt={name}
+                  style={{
+                    maxWidth: "100%",
+                    maxHeight: "100%",
+                    objectFit: "cover",
+                    transformOrigin: "center top",
+                  }}
+                  initial={{
+                    opacity: 0,
+                    y: 30,
+                    scale: 1.25,
+                    translateY: "-15%",
+                  }}
+                  animate={{
+                    opacity: 1,
+                    y: 0,
+                    scale: 1.25,
+                    translateY: "-15%",
+                  }}
+                  transition={{
+                    duration: 0.6,
+                    ease: [0.25, 0.1, 0.25, 1],
                   }}
                 />
               )

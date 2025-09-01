@@ -22,10 +22,12 @@ export default function Home() {
   }
 
   return (
-    <div style={{ display: 'flex', height: '100vh' }}>
-      <div>
-        <h1>hi</h1>
-        <button onClick={handleNewGame}>New Game</button>
+    <div style={{ display: 'flex', height: '100vh', background: '#000', color: '#fff', justifyContent: 'center', alignItems: 'center', fontFamily: 'Montserrat, sans-serif' }}>
+      <div style={{ textAlign: 'center' }}>
+        <h1 style={{ fontSize: '48px', marginBottom: '24px', fontWeight: '700' }}>Draft Royale</h1>
+        <button onClick={handleNewGame} style={{ padding: '12px 24px', fontSize: '16px', borderRadius: '6px', border: '1px solid #fff', background: '#222', color: '#fff', cursor: 'pointer' }}>
+          New Game
+        </button>
       </div>
     </div>
   );

@@ -2,7 +2,7 @@ import { CARDS } from "@/data/card";
 
 export type GameState = {
     id: string;
-    phase: "draft" | "complete";
+    phase: "draft" | "finished";
     pool: string[];
     used: Set<string>;
     decks: { p1: string[]; p2: string[] };
@@ -14,7 +14,9 @@ export type GameState = {
     roleByPlayerId: Record<string, "p1" | "p2">;
     timer: number;
     timeout?: NodeJS.Timeout;
+    turnDeadline?: number;
 };
+
 
 const games = new Map<string, GameState>();
 
@@ -89,7 +91,7 @@ export function applyPick(id: string, playerId: string, card: string) {
         if (g.turnIndex < g.schedule.length) {
             g.current = g.schedule[g.turnIndex].who;
         } else {
-            g.phase = "complete";
+            g.phase = "finished";
         }
     }
 

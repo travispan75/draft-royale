@@ -31,16 +31,12 @@ export default function Page() {
 
     useEffect(() => {
         if (!mounted || !roomId) return;
-
         const playerId = getOrCreatePlayerId();
-
         const socket = io('/', { path: '/socket', transports: ['websocket'] });
         socketRef.current = socket;
-
         socket.on('connect', () => {
             socket.emit('join_room', { roomId, playerId });
         });
-
         socket.on('room_state', (room) => {
             setErr(null);
             setRoomStatus(room.status);
@@ -48,11 +44,9 @@ export default function Page() {
                 router.replace(`/play/${roomId}`);
             }
         });
-
         socket.on('ws_error', (e) => {
             setErr(`${e.code}: ${e.msg}`);
         });
-
         return () => {
             socket.disconnect();
             socketRef.current = null;
@@ -62,15 +56,15 @@ export default function Page() {
     if (!mounted) return null;
 
     return (
-        <div style={{ display: 'flex', height: '100vh', justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+        <div style={{ display: 'flex', height: '100vh', justifyContent: 'center', alignItems: 'center', padding: 24, background: '#000000', color: '#ffffff', fontFamily: 'Montserrat' }}>
             <div style={{ textAlign: 'center', maxWidth: 640, width: '100%' }}>
                 <h1>{roomStatus === 'waiting' ? 'Waiting for your opponent…' : 'Ready!'}</h1>
                 <p>Send this link to your friend:</p>
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center' }}>
-                    <code style={{ padding: '8px 12px', border: '1px solid #ccc', borderRadius: 6, userSelect: 'all', maxWidth: '100%', overflowX: 'auto' }}>
+                    <code style={{ padding: '8px 12px', border: '1px solid #ccc', borderRadius: 6, userSelect: 'all', maxWidth: '100%', overflowX: 'auto', background: '#111', color: '#fff' }}>
                         {shareUrl || '…'}
                     </code>
-                    <button onClick={() => navigator.clipboard.writeText(shareUrl)} disabled={!shareUrl}>Copy</button>
+                    <button onClick={() => navigator.clipboard.writeText(shareUrl)} disabled={!shareUrl} style={{ background: '#222', color: '#fff', border: '1px solid #555', borderRadius: 6, padding: '6px 12px', cursor: shareUrl ? 'pointer' : 'not-allowed' }}>Copy</button>
                 </div>
                 {err && <p style={{ color: 'crimson', marginTop: 12 }}>Error: {err}</p>}
             </div>
