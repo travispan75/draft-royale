@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "tsx ws/server.ts",
     "build": "next build --turbopack",
-    "start": "next start",
+    "start": "tsx ws/server.ts",
     "lint": "eslint"
   },
   "dependencies": {
