@@ -30,6 +30,8 @@ export default function Home() {
   const [now, setNow] = useState(Date.now())
   const [offset, setOffset] = useState(0)
   const [ready, setReady] = useState(false)
+  const [connected, setConnected] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const socketRef = useRef<Socket<ServerToClient, ClientToServer> | null>(null)
   const playerIdRef = useRef<string>('')
@@ -67,6 +69,7 @@ export default function Home() {
     socketRef.current = socket
 
     socket.on('connect', () => {
+      setError(null)
       const roomId = id as string
       const playerId = playerIdRef.current
       socket.emit('join_room', { roomId, playerId })
@@ -76,11 +79,21 @@ export default function Home() {
 
     socket.on('draft_state', (s) => {
       setSnap(s)
+      setConnected(true)
+      setError(null)
     })
 
-    socket.on('ws_error', () => { })
-    socket.on('disconnect', () => { })
-    socket.on('connect_error', () => { })
+    socket.on('ws_error', (e) => {
+      setError(e.msg)
+    })
+    socket.on('disconnect', () => {
+      setConnected(false)
+      setError('Connection lost. Reconnecting…')
+    })
+    socket.on('connect_error', () => {
+      setConnected(false)
+      setError('Unable to connect to the game. Retrying…')
+    })
 
     return () => {
       socket.disconnect()
@@ -97,7 +110,7 @@ export default function Home() {
         : null)
 
   const canPick =
-    !!(snap && myRole && snap.status === 'draft' && snap.turn === myRole)
+    !!(connected && snap && myRole && snap.status === 'draft' && snap.turn === myRole)
   const allCards = snap ? snap.pool : []
   const used = snap ? [...snap.picks.p1, ...snap.picks.p2] : []
 
@@ -119,6 +132,11 @@ export default function Home() {
       paddingLeft: 10,
       paddingRight: 10,
     }}>
+      {error && (
+        <div role="alert" style={{ position: 'fixed', top: 16, left: 16, right: 16, zIndex: 10, padding: '12px 16px', borderRadius: 8, background: '#881337', color: '#ffffff' }}>
+          {error}
+        </div>
+      )}
       <div
         style={{
           flexBasis: "40%",
