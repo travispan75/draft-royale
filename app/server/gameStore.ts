@@ -122,6 +122,7 @@ export async function applyPick(
 ): Promise<GameState> {
     const g = await loadGame(id);
     if (!g) throw new Error("game_not_found");
+    if (g.phase !== "draft") throw new Error("phase_mismatch");
 
     const role = g.roleByPlayerId[playerId];
     if (!role) throw new Error("invalid_player");
